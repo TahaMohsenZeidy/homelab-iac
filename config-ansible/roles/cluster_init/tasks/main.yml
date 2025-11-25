@@ -1,0 +1,124 @@
+---
+
+# Check if the cluster is already initialized
+- name: Check if the cluster is already initialized
+  stat:
+    path: "/etc/kubernetes/admin.conf"
+  register: cluster_init
+
+# Initialize the K8s cluster using kubeadm
+- name: Initialize the cluster
+  command: kubeadm init \
+    --pod-network-cidr={{ pod_network_cidr }} \ 
+    --control-plane-endpoint {{ ansible_host }}:{{ control_plane_endpoint_port }} \
+    --kubernetes-version {{ kubernetes_version }}
+  when: 
+    - not cluster_init.stat.exists
+    - inventory_hostname in groups['masters'][0]
+  changed_when: true
+
+# Generate the worker join command
+- name: Generate the worker join command
+  command: kubeadm token create --print-join-command
+  register: worker_join_command
+  when: 
+    - not cluster_init.stat.exists
+    - inventory_hostname in groups['masters'][0]
+  changed_when: false
+
+# Set fact for the worker join command
+- name: Set fact for the worker join command
+  set_fact:
+    worker_join_command: "{{ hostvars[groups['masters'][0]]['worker_join_command'].stdout }}"
+  when: 
+    - inventory_hostname in groups['workers']
+    - hostvars[groups['masters'][0]]['worker_join_command'] is defined
+  changed_when: false
+
+# Check if woker nodes are already joined
+- name: Check if worker nodes are already joined
+  stat:
+    path: "/etc/kubernetes/pki/ca.crt"
+  register: worker_joined
+  when: 
+    - inventory_hostname in groups['workers']
+  changed_when: false
+
+# Join the worker nodes to the cluster
+- name: Join the worker nodes to the cluster
+  command: "{{ worker_join_command }}"
+  when: 
+    - inventory_hostname in groups['workers']
+    - not worker_joined.stat.exists
+  changed_when: true
+  register: worker_joined
+  retries: 3
+  delay: 10
+  until: worker_joined.rc == 0
+
+# Setup kubeconfig for the cluster
+- name: Setup kubeconfig for the cluster
+  block:
+    - name: Create the .kube directory
+      file:
+        path: /home/{{ ansible_user }}/.kube
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Copy the admin.conf to the .kube directory
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/{{ ansible_user }}/.kube/config
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+        remote_src: yes
+      
+    - name: Set KUBECONFIG environment variable
+      lineinfile:
+        path: /home/{{ ansible_user }}/.bashrc
+        line: 'export KUBECONFIG=/home/{{ ansible_user }}/.kube/config'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+
+  when: 
+    - inventory_hostname in groups['masters'][0]
+
+# Display cluster status
+- name: Display cluster status
+  command: kubectl cluster-info
+  environment:
+    KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  when: 
+    - inventory_hostname in groups['masters'][0]
+  register: cluster_status
+
+- debug:
+    msg: "{{ cluster_status.stdout }}"
+  when:
+    - inventory_hostname in groups['masters'][0]
+
+
+# Setup local kubeconfig for the user
+- name: Setup local kubeconfig for the user
+  block:
+    - name: Create the .kube directory
+      file:
+        path: "{{ lookup('env', 'HOME') }}/.kube" 
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Fetch the kubeconfig to local machine 
+      fetch:
+        src: "/home/{{ ansible_user }}/.kube/config"
+        dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+        flat: yes  
+      become: false
+      run_once: true
+      when: inventory_hostname in groups['masters'][0] 

@@ -1,0 +1,3 @@
+%{ for vm in vms ~}
+${vm.vm_private_ip}  ${vm.vm_name}
+%{ endfor ~}

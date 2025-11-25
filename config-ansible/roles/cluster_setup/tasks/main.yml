@@ -1,0 +1,76 @@
+######################################################################
+################## CNI configuration #############################
+######################################################################
+
+- name: Create the directory for flannel manifests
+  file:
+    path: "/home/{{ ansible_user }}/flannel"
+    state: directory
+    mode: '0755'
+  when: inventory_hostname == groups['masters'][0]
+
+- name: Push flannel.yaml file to master node
+  copy:
+    src: "{{ playbook_dir }}/../kube_manifests/flannel.yml"
+    dest: "/home/{{ ansible_user }}/flannel/flannel.yml"
+    mode: 0644
+  when: inventory_hostname == groups['masters'][0]
+
+- name: Install and configure flannel CNI
+  command: kubectl apply -f /home/{{ ansible_user }}/flannel/flannel.yml
+  when: inventory_hostname == groups['masters'][0]
+  run_once: true
+
+- name: Wait for all nodes to be ready
+  command: kubectl get nodes
+  register: nodes_ready
+  until: "'NotReady' not in nodes_ready.stdout"
+  retries: 30
+  delay: 10
+  when: inventory_hostname == groups['masters'][0]
+
+
+######################################################################
+############# Storage Provisioner configuration #####################
+######################################################################
+
+- name: Create the directory for local-path-storage manifests
+  file:
+    path: "/home/{{ ansible_user }}/local-path-storage"
+    state: directory
+    mode: '0755'
+  when: inventory_hostname == groups['masters'][0]
+
+- name: Push local-path-storage.yaml file to master node
+  copy:
+    src: "{{ playbook_dir }}/../kube_manifests/local-path.yml"
+    dest: "/home/{{ ansible_user }}/local-path-storage/local-path-storage.yaml"
+    mode: 0644
+  when: inventory_hostname == groups['masters'][0]
+
+- name: Install local-path storage provisioner
+  command: kubectl apply -f /home/{{ ansible_user }}/local-path-storage/local-path-storage.yaml
+  when: inventory_hostname == groups['masters'][0]
+  run_once: true
+
+- name: Wait for local-path storage provisioner to be ready
+  command: kubectl wait --for=condition=available --timeout=300s deployment/local-path-provisioner -n local-path-storage
+  when: inventory_hostname == groups['masters'][0]
+
+- name: Set local-path as default storage class
+  command: kubectl patch storageclass local-path -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+  when: inventory_hostname == groups['masters'][0]
+
+- name: Verify storage class installation
+  command: kubectl get storageclass
+  register: storage_classes
+  when: inventory_hostname == groups['masters'][0]
+
+- name: Display available storage classes
+  debug:
+    msg: |
+      Storage Classes Available:
+      {{ storage_classes.stdout_lines }}
+  when: inventory_hostname == groups['masters'][0]
+
+

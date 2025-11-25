@@ -1,0 +1,3 @@
+192.168.11.213    k8s-master1.homelab.local k8s-master1
+192.168.11.214    k8s-worker1.homelab.local k8s-worker1
+192.168.11.215    k8s-worker2.homelab.local k8s-worker2

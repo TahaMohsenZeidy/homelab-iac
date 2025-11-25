@@ -1,0 +1,57 @@
+---
+
+# Install and configure firewall on workers
+- name: Install and configure firewall
+  hosts: k8s_nodes
+  gather_facts: false
+  vars:
+    ansible_env:
+      KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+  roles:
+    - roles/firewall
+
+#Tasks that are common to all nodes
+- name: Common tasks
+  hosts: k8s_nodes
+  gather_facts: false
+  vars:
+    ansible_env:
+      KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+  roles:
+    - roles/common
+
+# Install and configure Kubernetes
+- name: Install and configure Kubernetes
+  hosts: k8s_nodes
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    ansible_env:
+      KUBECONFIG: /home/{{ ansible_user }}/.kube/config 
+  become: true
+  roles:
+    - roles/cluster_init
+
+# Setup the cluster
+- name: Configure the cluster
+  hosts: masters
+  gather_facts: false
+  vars:
+    ansible_env:
+      KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: false
+  roles:
+    - roles/cluster_setup
+
+# Install and configure Helm
+- name: Install and configure Helm
+  hosts: masters
+  gather_facts: false
+  vars:
+    ansible_env:  
+      KUBECONFIG: /home/{{ ansible_user }}/.kube/config
+  become: true
+  roles:
+    - roles/helm

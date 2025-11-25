@@ -1,0 +1,113 @@
+---
+
+# Add the DNS records to /etc/hosts
+- name: Add DNS records to /etc/hosts
+  blockinfile:
+    path: /etc/hosts
+    block: "{{ lookup('file', playbook_dir + '/../dns/dns-records.txt') }}"
+
+# Disable Swap
+- name: Disable Swap
+  command: swapoff -a
+
+# Set Selinux to permissive mode
+- name: Put SELinux in permissive mode, logging actions that would be blocked.
+  ansible.posix.selinux:
+    policy: targeted
+    state: permissive
+
+# Load kernel modules on all the nodes
+- name: Load kernel modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - br_netfilter
+    - overlay
+
+# Make the Kernel modules persistent
+- name: Make the Kernel modules persistent
+  lineinfile:
+    path: /etc/modules-load.d/containerd.conf
+    create: yes
+    owner: root
+    group: root
+    mode: '0644'
+    line: "{{ item }}"
+  with_items:
+    - br_netfilter
+    - overlay
+
+# Add extra kernel parameters 
+- name: Add extra kernel parameters
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: yes
+    state: present
+    reload: yes
+  with_items:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+
+# Install dnf-core-plugin package
+- name: Install dnf-core-plugin package
+  dnf:
+    name: dnf-plugins-core
+    state: present
+    update_cache: yes
+    disable_gpg_check: yes
+
+# Add docker repo to dnf config manager
+- name: Add docker repo to dnf config manager
+  command: dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+  args:
+    creates: /etc/yum.repos.d/docker-ce.repo
+
+# Install Containerd.io
+- name: Install Containerd.io
+  dnf:
+    name: containerd.io
+    state: present
+    disable_gpg_check: yes
+
+# Generate default containerd config file
+- name: Generate default containerd.io config file
+  shell: sudo containerd config default | sudo tee /etc/containerd/config.toml
+
+# Configure containerd to use systemd cgroup driver
+- name: Configure containerd to use systemd cgroup driver
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup\s*=\s*false'
+    replace: 'SystemdCgroup = true'
+  notify: restart containerd
+
+# Add Kubernetes repo to dnf config manager
+- name: Add Kubernetes repo to dnf config manager
+  copy:
+    dest: /etc/yum.repos.d/kubernetes.repo
+    content: |
+      [kubernetes]
+      name=Kubernetes
+      baseurl=https://pkgs.k8s.io/core:/stable:/v1.34/rpm/
+      enabled=1
+      gpgcheck=1
+      gpgkey=https://pkgs.k8s.io/core:/stable:/v1.34/rpm/repodata/repomd.xml.key
+      exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+    mode: '0644'
+  
+
+# Install Kubernetes packages
+- name: Install Kubernetes packages
+  dnf:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    update_cache: yes
+    disable_excludes: kubernetes
+    disable_gpg_check: yes
+

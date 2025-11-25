@@ -1,0 +1,18 @@
+# Sensitive files
+Tools_config/vault
+Tools_config/regexp_README.md
+
+# Terraform
+infra-terraform/.terraform/
+infra-terraform/.terraform.lock.hcl
+infra-terraform/*.tfstate
+infra-terraform/*.tfstate.backup
+infra-terraform/*.tfstate.lock.info
+infra-terraform/.env
+
+# General
+.DS_Store
+*.log
+.env
+.env.local
+

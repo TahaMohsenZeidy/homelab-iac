@@ -1,0 +1,9 @@
+#SPDX-License-Identifier: MIT-0
+---
+# handlers file for roles/firewall
+
+- name: restart firewalld
+  systemd:
+    name: firewalld
+    state: restarted
+    enabled: yes

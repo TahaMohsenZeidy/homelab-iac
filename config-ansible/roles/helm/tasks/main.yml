@@ -1,0 +1,34 @@
+---
+######################################################################
+################## Install and configure Helm #######################
+######################################################################
+
+- name: Download Helm installation script
+  get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: /tmp/get_helm.sh
+    mode: '0755'
+  when: inventory_hostname == groups['masters'][0]
+
+- name: Install Helm
+  command: /tmp/get_helm.sh
+  when: inventory_hostname == groups['masters'][0]
+  become: yes
+  environment:
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+- name: Verify Helm installation
+  command: /usr/local/bin/helm version --short
+  register: helm_version
+  when: inventory_hostname == groups['masters'][0]
+  become: yes
+  environment:
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+- name: Display Helm version
+  debug:
+    msg: "Helm installed: {{ helm_version.stdout }}"
+  when: inventory_hostname == groups['masters'][0]
+
+
+

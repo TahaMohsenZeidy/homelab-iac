@@ -1,0 +1,56 @@
+---
+
+# Install firewalld
+- name: Install firewalld
+  dnf:
+    name: firewalld
+    state: present
+    update_cache: yes
+    disable_gpg_check: yes
+
+# Open port for ssh
+- name: Open port for ssh
+  firewalld:
+    port: 22/tcp
+    permanent: yes
+    state: enabled
+
+# Open ports for Kubernetes masters(tcp)
+- name: Open ports for Kubernetes masters
+  firewalld:
+    port: "{{ item }}/tcp"
+    permanent: yes
+    state: enabled
+  with_items:
+    - 6443
+    - 2379
+    - 2380
+    - 10250
+    - 10251
+    - 10252
+    - 10257
+    - 10259
+    - 179
+  when: inventory_hostname in groups['masters']
+
+# Open ports for Kubernetes workers (tcp)
+- name: Open ports for Kubernetes workers
+  firewalld:
+    port: "{{ item }}/tcp"
+    permanent: yes
+    state: enabled
+  with_items:
+    - 179
+    - 10250
+    - 30000-32767
+
+  when: inventory_hostname in groups['workers']
+
+# Open ports for Kubernetes ndoes (udp)
+- name: Open ports for Kubernetes nodes
+  firewalld:
+    port: "4789/udp"
+    permanent: yes
+    state: enabled
+  notify: restart firewalld
+
