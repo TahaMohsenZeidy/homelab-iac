@@ -1,3 +1,0 @@
-[submodule "infra-terraform"]
-	path = infra-terraform
-	url = git@gitlab.homelab.local:homelab/infra/infra-terraform.git
